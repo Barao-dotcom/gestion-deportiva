@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { supabase } from '../config/ConexionBD'; // Ajusta la ruta a tu conexión
+import { supabase } from '../config/ConexionBD'; 
 
-// Definimos la estructura de los datos que traeremos
 interface Rendimiento {
   fecha: string;
   peso_kg: number;
@@ -20,9 +19,10 @@ interface AtletaData {
 
 export default function ProgresoEquipoScreen() {
   const [equipo, setEquipo] = useState<AtletaData[]>([]);
+  const [equipoFiltrado, setEquipoFiltrado] = useState<AtletaData[]>([]); // Nuevo estado para el buscador
+  const [textoBusqueda, setTextoBusqueda] = useState(''); // Nuevo estado para el input
   const [cargando, setCargando] = useState(true);
 
-  // 1. Obtener la lista de perfiles y su historial de rendimiento
   const cargarProgresoEquipo = async () => {
     setCargando(true);
     try {
@@ -33,11 +33,13 @@ export default function ProgresoEquipoScreen() {
           nombre,
           rendimiento ( fecha, peso_kg, nivel_fatiga )
         `)
-        // Opcional: .eq('id_rol', ID_DEL_ROL_ATLETA) si tienes los roles mapeados
         .order('nombre', { ascending: true });
 
       if (error) throw error;
-      setEquipo(data as unknown as AtletaData[]);
+      
+      const datosAtletas = data as unknown as AtletaData[];
+      setEquipo(datosAtletas);
+      setEquipoFiltrado(datosAtletas); // Inicialmente, mostramos a todos
     } catch (error) {
       console.error("Error al cargar el equipo:", error);
     } finally {
@@ -49,10 +51,21 @@ export default function ProgresoEquipoScreen() {
     cargarProgresoEquipo();
   }, []);
 
-  // 2. Motor de Generación de PDF
+  // Función inteligente para filtrar en tiempo real
+  const manejarBusqueda = (texto: string) => {
+    setTextoBusqueda(texto);
+    if (texto.trim() === '') {
+      setEquipoFiltrado(equipo); // Si borra tod, volvemos a mostrar la lista completa
+    } else {
+      const filtrados = equipo.filter(atleta => 
+        (atleta.nombre || '').toLowerCase().includes(texto.toLowerCase())
+      );
+      setEquipoFiltrado(filtrados);
+    }
+  };
+
   const generarPDF = async (atleta: AtletaData) => {
     try {
-      // Armamos las filas de la tabla leyendo el historial del atleta
       const filasHistorial = atleta.rendimiento.map(r => `
         <tr>
           <td>${new Date(r.fecha).toLocaleDateString()}</td>
@@ -63,7 +76,6 @@ export default function ProgresoEquipoScreen() {
         </tr>
       `).join('');
 
-      // Plantilla HTML profesional (Este es el "diseño" de tu PDF)
       const htmlContent = `
         <html>
           <head>
@@ -97,11 +109,8 @@ export default function ProgresoEquipoScreen() {
           </body>
         </html>
       `;
-
-      // Convertimos el HTML a un archivo PDF
+          
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      
-      // Abrimos la ventana nativa para compartir/guardar el PDF
       await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
 
     } catch (error) {
@@ -110,9 +119,7 @@ export default function ProgresoEquipoScreen() {
     }
   };
 
-  // 3. Renderizado de la lista
   const renderizarAtleta = ({ item }: { item: AtletaData }) => {
-    // Calculamos el promedio de fatiga rápido para mostrarlo en la tarjeta
     const promedioFatiga = item.rendimiento.length > 0 
       ? (item.rendimiento.reduce((acc, curr) => acc + curr.nivel_fatiga, 0) / item.rendimiento.length).toFixed(1)
       : 'N/A';
@@ -140,11 +147,34 @@ export default function ProgresoEquipoScreen() {
   return (
     <View style={styles.contenedor}>
       <Text style={styles.tituloSec}>Progreso del Equipo</Text>
+
+      {/* --- BARRA DE BÚSQUEDA --- */}
+      <View style={styles.contenedorBuscador}>
+        <FontAwesome5 name="search" size={16} color="#888" style={styles.iconoBuscador} />
+        <TextInput
+          style={styles.inputBuscador}
+          placeholder="Buscar atleta por nombre..."
+          value={textoBusqueda}
+          onChangeText={manejarBusqueda}
+          autoCorrect={false}
+        />
+        {textoBusqueda.length > 0 && (
+          <TouchableOpacity onPress={() => manejarBusqueda('')}>
+            <FontAwesome5 name="times-circle" size={18} color="#888" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <FlatList
-        data={equipo}
+        data={equipoFiltrado} // Ahora la lista usa los datos filtrados
         keyExtractor={(item) => item.id}
         renderItem={renderizarAtleta}
         contentContainerStyle={{ paddingBottom: 20 }}
+        ListEmptyComponent={
+          <Text style={{ textAlign: 'center', marginTop: 20, color: '#888' }}>
+            No se encontraron atletas.
+          </Text>
+        }
       />
     </View>
   );
@@ -153,6 +183,9 @@ export default function ProgresoEquipoScreen() {
 const styles = StyleSheet.create({
   contenedor: { flex: 1, backgroundColor: '#f8f9fa', padding: 16 },
   tituloSec: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 15, textAlign: 'center' },
+  contenedorBuscador: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, alignItems: 'center', height: 45, marginBottom: 16, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  iconoBuscador: { marginRight: 8 },
+  inputBuscador: { flex: 1, fontSize: 16, color: '#333' },
   tarjeta: { flexDirection: 'row', backgroundColor: '#fff', padding: 16, borderRadius: 10, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, alignItems: 'center', justifyContent: 'space-between', borderLeftWidth: 4, borderLeftColor: '#17a2b8' },
   infoAtleta: { flex: 1 },
   nombre: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
