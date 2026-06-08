@@ -4,6 +4,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 
 import HomeScreen from '../screens/HomeScreen';
 import PerfilScreen from '../screens/PerfilScreen'; // Importamos la nueva pantalla real
+import ProgresoEquipoScreen from '../screens/ProgresoEquipoScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -37,6 +38,16 @@ export default function AppNavigator() {
                 component={PerfilScreen} // Conectamos la pantalla completa aquí
                 options={{ title: 'Mi Rendimiento' }} 
             />
+            <Tab.Screen 
+                name="Progreso" 
+                component={ProgresoEquipoScreen} 
+                options={{
+                tabBarIcon: ({ color, size }) => (
+                <FontAwesome5 name="chart-bar" size={size} color={color} />
+        ),
+            title: 'Equipo'
+  }} 
+/>
         </Tab.Navigator>
     );
 }
